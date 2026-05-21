@@ -1,0 +1,167 @@
+name: CI - Checkout Tests
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'checkout-example/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'checkout-example/**'
+
+jobs:
+  gradle-tests:
+    name: Backend Tests (JUnit)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('checkout-example/**/*.gradle*', 'checkout-example/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Grant execute permission for gradlew
+        run: chmod +x checkout-example/gradlew
+
+      - name: Run Gradle tests
+        run: cd checkout-example && ./gradlew test
+        env:
+          ADYEN_API_KEY: ${{ secrets.ADYEN_API_KEY }}
+          ADYEN_MERCHANT_ACCOUNT: ${{ secrets.ADYEN_MERCHANT_ACCOUNT }}
+          ADYEN_CLIENT_KEY: ${{ secrets.ADYEN_CLIENT_KEY }}
+          ADYEN_HMAC_KEY: ${{ secrets.ADYEN_HMAC_KEY }}
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: gradle-test-results
+          path: checkout-example/build/reports/tests/test/
+
+  playwright-tests:
+    name: E2E Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: gradle-tests
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-gradle-${{ hashFiles('checkout-example/**/*.gradle*', 'checkout-example/gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+
+      - name: Cache npm packages
+        uses: actions/cache@v4
+        with:
+          path: checkout-example/e2e/node_modules
+          key: ${{ runner.os }}-npm-${{ hashFiles('checkout-example/e2e/package-lock.json') }}
+          restore-keys: ${{ runner.os }}-npm-
+
+      - name: Build and start application
+        run: |
+          chmod +x checkout-example/gradlew
+          cd checkout-example && ./gradlew build -x test
+          cd .. && nohup bash -c 'cd checkout-example && ADYEN_API_KEY="${ADYEN_API_KEY:-test}" ADYEN_MERCHANT_ACCOUNT="${ADYEN_MERCHANT_ACCOUNT:-test}" ADYEN_CLIENT_KEY="${ADYEN_CLIENT_KEY:-test}" ADYEN_HMAC_KEY="${ADYEN_HMAC_KEY:-44782DEF547AAA06C910C43D1F7508C13573E96ADA3A520E13B7027BFA6B2F4E}" ./gradlew bootRun' > /tmp/app.log 2>&1 &
+          echo "Waiting for application to start..."
+          for i in $(seq 1 30); do
+            if curl -s http://localhost:8080 > /dev/null 2>&1; then
+              echo "Application is ready!"
+              break
+            fi
+            sleep 2
+          done
+        env:
+          ADYEN_API_KEY: ${{ secrets.ADYEN_API_KEY }}
+          ADYEN_MERCHANT_ACCOUNT: ${{ secrets.ADYEN_MERCHANT_ACCOUNT }}
+          ADYEN_CLIENT_KEY: ${{ secrets.ADYEN_CLIENT_KEY }}
+          ADYEN_HMAC_KEY: ${{ secrets.ADYEN_HMAC_KEY }}
+
+      - name: Install Playwright dependencies
+        run: |
+          cd checkout-example/e2e
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Run Playwright page and webhook tests
+        run: cd checkout-example/e2e && npx playwright test checkout-pages webhook
+        env:
+          BASE_URL: http://localhost:8080
+
+      - name: Run Playwright card payment tests
+        if: ${{ env.ADYEN_API_KEY != '' }}
+        continue-on-error: true
+        run: cd checkout-example/e2e && npx playwright test card-payment
+        env:
+          BASE_URL: http://localhost:8080
+          ADYEN_API_KEY: ${{ secrets.ADYEN_API_KEY }}
+
+      - name: Upload Playwright results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            checkout-example/e2e/test-results/
+            checkout-example/e2e/playwright-report/
+
+  notify-summary:
+    name: Test Summary
+    runs-on: ubuntu-latest
+    needs: [gradle-tests, playwright-tests]
+    if: always()
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate test summary
+        run: |
+          echo "## Test Execution Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Suite | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Backend (JUnit) | ${{ needs.gradle-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| E2E (Playwright) | ${{ needs.playwright-tests.result == 'success' && '✅ Passed' || needs.playwright-tests.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Triggered by:** ${{ github.event_name }} on \`${{ github.ref_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**Commit:** ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
+
+      - name: Simulate Slack notification
+        if: always()
+        run: |
+          node checkout-example/e2e/scripts/slack-notify.js \
+            --event "${{ github.event_name }}" \
+            --ref "${{ github.ref_name }}" \
+            --commit "${{ github.sha }}" \
+            --gradle-result "${{ needs.gradle-tests.result }}" \
+            --playwright-result "${{ needs.playwright-tests.result }}" \
+            --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" \
+            --pr-number "${{ github.event.pull_request.number || '' }}" \
+            --pr-title "${{ github.event.pull_request.title || '' }}" \
+            --actor "${{ github.actor }}"
