@@ -1,0 +1,15 @@
+{
+  "name": "checkout-e2e",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:pages": "npx playwright test checkout-pages",
+    "test:card": "npx playwright test card-payment",
+    "test:webhook": "npx playwright test webhook"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.60.0"
+  }
+}
