@@ -1,0 +1,20 @@
+{
+  "name": "adyen-e2e-tests",
+  "version": "1.0.0",
+  "description": "Playwright E2E tests for Adyen Spring Online Payments",
+  "scripts": {
+    "test": "npx playwright test",
+    "test:headed": "npx playwright test --headed",
+    "test:chromium": "npx playwright test --project=chromium",
+    "test:firefox": "npx playwright test --project=firefox",
+    "test:webkit": "npx playwright test --project=webkit",
+    "test:debug": "npx playwright test --debug",
+    "report": "npx playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.52.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
