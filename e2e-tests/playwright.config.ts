@@ -11,22 +11,50 @@ export default defineConfig({
     ['list'],
   ],
   use: {
-    baseURL: 'http://localhost:8080',
+    baseURL: process.env.BASE_URL || 'http://localhost:8080',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'on-first-retry',
   },
   projects: [
     {
+      name: 'checkout',
+      testDir: './tests/checkout',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'giftcard',
+      testDir: './tests/giftcard',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'paybylink',
+      testDir: './tests/paybylink',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'subscription',
+      testDir: './tests/subscription',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
+      name: 'authorisation-adjustment',
+      testDir: './tests/authorisation-adjustment',
+      use: { ...devices['Desktop Chrome'] },
+    },
+    {
       name: 'chromium',
+      testDir: './tests',
       use: { ...devices['Desktop Chrome'] },
     },
     {
       name: 'firefox',
+      testDir: './tests',
       use: { ...devices['Desktop Firefox'] },
     },
     {
       name: 'webkit',
+      testDir: './tests',
       use: { ...devices['Desktop Safari'] },
     },
   ],
