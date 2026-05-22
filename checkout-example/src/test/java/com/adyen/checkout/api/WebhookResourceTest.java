@@ -6,6 +6,8 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpStatus;
 
+import java.security.SignatureException;
+
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.*;
 
@@ -86,5 +88,150 @@ class WebhookResourceTest {
         when(hmacValidator.validateHMAC(any(), any())).thenReturn(false);
 
         assertThrows(RuntimeException.class, () -> webhookResource.webhooks(json));
+    }
+
+    // --- SignatureException handling ---
+
+    @Test
+    void webhooks_signatureException_isRethrown() throws Exception {
+        String json = buildNotificationJson("AUTHORISATION", "true", "\"alias\": \"H123\"");
+
+        when(hmacValidator.validateHMAC(any(), any())).thenThrow(new SignatureException("bad sig"));
+
+        assertThrows(SignatureException.class, () -> webhookResource.webhooks(json));
+    }
+
+    // --- Different event codes ---
+
+    @Test
+    void webhooks_captureEventCode_returns202() throws Exception {
+        String json = buildNotificationJson("CAPTURE", "true", "\"alias\": \"H123\"");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    @Test
+    void webhooks_cancellationEventCode_returns202() throws Exception {
+        String json = buildNotificationJson("CANCELLATION", "true", "\"alias\": \"H123\"");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    @Test
+    void webhooks_refundEventCode_returns202() throws Exception {
+        String json = buildNotificationJson("REFUND", "true", "\"alias\": \"H123\"");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    @Test
+    void webhooks_refundFailedEventCode_returns202() throws Exception {
+        String json = buildNotificationJson("REFUND_FAILED", "false", "\"alias\": \"H123\"");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    // --- additionalData variations ---
+
+    @Test
+    void webhooks_withEmptyAdditionalData_returns202() throws Exception {
+        String json = buildNotificationJson("AUTHORISATION", "true", "");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    @Test
+    void webhooks_withMultipleAdditionalDataFields_returns202() throws Exception {
+        String json = buildNotificationJson("AUTHORISATION", "true",
+                "\"alias\": \"X\", \"shopperEmail\": \"test@test.com\", \"cardBin\": \"411111\"");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    // --- Edge cases ---
+
+    @Test
+    void webhooks_successFalse_returns202() throws Exception {
+        String json = buildNotificationJson("AUTHORISATION", "false", "\"alias\": \"H123\"");
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+    }
+
+    @Test
+    void webhooks_multipleNotificationItems_processesFirst() throws Exception {
+        String json = """
+                {
+                  "live": "false",
+                  "notificationItems": [
+                    {
+                      "NotificationRequestItem": {
+                        "eventCode": "AUTHORISATION",
+                        "merchantAccountCode": "TestMerchant",
+                        "merchantReference": "ref1",
+                        "pspReference": "psp1",
+                        "amount": {"currency": "EUR", "value": 1000},
+                        "success": "true",
+                        "additionalData": {"alias": "H1"}
+                      }
+                    },
+                    {
+                      "NotificationRequestItem": {
+                        "eventCode": "CAPTURE",
+                        "merchantAccountCode": "TestMerchant",
+                        "merchantReference": "ref2",
+                        "pspReference": "psp2",
+                        "amount": {"currency": "EUR", "value": 2000},
+                        "success": "true",
+                        "additionalData": {"alias": "H2"}
+                      }
+                    }
+                  ]
+                }
+                """;
+        when(hmacValidator.validateHMAC(any(), any())).thenReturn(true);
+
+        var response = webhookResource.webhooks(json);
+        assertEquals(HttpStatus.ACCEPTED, response.getStatusCode());
+        verify(hmacValidator, times(1)).validateHMAC(any(), any());
+    }
+
+    // --- Helper ---
+
+    private String buildNotificationJson(String eventCode, String success, String additionalDataFields) {
+        String additionalData = additionalDataFields.isEmpty()
+                ? "{}"
+                : "{" + additionalDataFields + "}";
+        return """
+                {
+                  "live": "false",
+                  "notificationItems": [
+                    {
+                      "NotificationRequestItem": {
+                        "eventCode": "%s",
+                        "merchantAccountCode": "TestMerchant",
+                        "merchantReference": "ref123",
+                        "pspReference": "psp123",
+                        "amount": {"currency": "EUR", "value": 1000},
+                        "success": "%s",
+                        "additionalData": %s
+                      }
+                    }
+                  ]
+                }
+                """.formatted(eventCode, success, additionalData);
     }
 }
