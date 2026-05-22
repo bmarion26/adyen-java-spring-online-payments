@@ -1,0 +1,26 @@
+plugins {
+    id 'jacoco'
+}
+
+repositories {
+    mavenCentral()
+}
+
+tasks.register('jacocoFullReport') {
+    dependsOn subprojects.collect { it.tasks.named('jacocoTestReport') }
+    group = 'verification'
+    description = 'Runs tests and generates JaCoCo coverage reports for all modules'
+
+    doLast {
+        println ''
+        println '=== JaCoCo Coverage Reports ==='
+        subprojects.each { subproject ->
+            def reportDir = subproject.layout.buildDirectory.dir('reports/jacoco/test/html').get().asFile
+            if (reportDir.exists()) {
+                println "  ${subproject.name}: ${reportDir}/index.html"
+            }
+        }
+        println ''
+        println 'Open the above paths in a browser to view coverage reports.'
+    }
+}
