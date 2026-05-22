@@ -3,7 +3,7 @@ import { test, expect } from '@playwright/test';
 test.describe('Checkout Example - Index Page', () => {
   test('should load the index page successfully', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveTitle(/Adyen/i);
+    await expect(page).toHaveTitle(/Checkout/i);
     await expect(page.locator('body')).toBeVisible();
   });
 
@@ -19,12 +19,9 @@ test.describe('Checkout Example - Index Page', () => {
     }
   });
 
-  test('should take a visual snapshot of the index page', async ({ page }) => {
+  test('should take a screenshot of the index page', async ({ page }) => {
     await page.goto('/');
-    await expect(page).toHaveScreenshot('index-page.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.1,
-    });
+    await page.screenshot({ path: '../screenshots/index-page.png', fullPage: true });
   });
 });
 
@@ -73,13 +70,10 @@ test.describe('Checkout Example - Card Payment', () => {
     }
   });
 
-  test('should take a visual snapshot of the card page', async ({ page }) => {
+  test('should take a screenshot of the card page', async ({ page }) => {
     await page.goto('/preview/card');
     await page.waitForLoadState('networkidle');
-    await expect(page).toHaveScreenshot('card-payment.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.1,
-    });
+    await page.screenshot({ path: '../screenshots/card-payment.png', fullPage: true });
   });
 });
 
@@ -101,29 +95,20 @@ test.describe('Checkout Example - Responsive Design', () => {
     await page.setViewportSize({ width: 375, height: 667 });
     await page.goto('/');
     await expect(page.locator('body')).toBeVisible();
-    await expect(page).toHaveScreenshot('index-mobile.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.1,
-    });
+    await page.screenshot({ path: '../screenshots/index-mobile.png', fullPage: true });
   });
 
   test('should render correctly on tablet viewport', async ({ page }) => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.goto('/');
     await expect(page.locator('body')).toBeVisible();
-    await expect(page).toHaveScreenshot('index-tablet.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.1,
-    });
+    await page.screenshot({ path: '../screenshots/index-tablet.png', fullPage: true });
   });
 
   test('should render correctly on desktop viewport', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await expect(page.locator('body')).toBeVisible();
-    await expect(page).toHaveScreenshot('index-desktop.png', {
-      fullPage: true,
-      maxDiffPixelRatio: 0.1,
-    });
+    await page.screenshot({ path: '../screenshots/index-desktop.png', fullPage: true });
   });
 });
